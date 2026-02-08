@@ -16,7 +16,7 @@ type Player struct {
 
 	// Basic info
 	Name          string
-	PlayTime      int
+	PlayTime      uint32
 	Funds         int
 	HunterRank    int
 	HRPoints      int
@@ -75,7 +75,7 @@ type Customization struct {
 	HairStyle int
 	Face      int
 	Features  int
-	PlayTime  int
+	PlayTime  uint32
 
 	// Colors
 	SkinColor     [4]int
@@ -121,7 +121,7 @@ func main() {
 	setHairStyle := flag.Int("hairstyle", -1, "Set hair style (0-?)")
 	setFace := flag.Int("face", -1, "Set face (0-?)")
 	setFeatures := flag.Int("features", -1, "Set features (0-?)")
-	setPlayTime := flag.Int("playtime", -1, "Set play time (seconds)")
+	setPlayTime := flag.Int("playtime", 0, "Set play time (minutes)")
 
 	// Color flags
 	setSkinR := flag.Int("skinr", -1, "Set skin color red (0-255)")
@@ -256,7 +256,7 @@ func main() {
 		*setHairR != -1 || *setHairG != -1 || *setHairB != -1 || *setHairA != -1 ||
 		*setFunds != -1 || *setHRPoints != -1 || *setHunterRank != -1 ||
 		*setAcademyPoints != -1 || *setBherna != -1 || *setKokoto != -1 ||
-		*setPokke != -1 || *setYukumo != -1 || *setPlayTime != -1
+		*setPokke != -1 || *setYukumo != -1 || *setPlayTime != 0
 
 	// Add this after checking for customization but before displaying info
 	if *searchStr != "" && *replaceStr != "" {
@@ -408,8 +408,8 @@ func main() {
 		if *setFeatures != -1 {
 			custom.Features = *setFeatures
 		}
-		if *setPlayTime != -1 {
-			custom.PlayTime = *setPlayTime
+		if *setPlayTime != 0 {
+			custom.PlayTime = uint32(*setPlayTime) * uint32(60)
 		}
 
 		// Only override color components that are explicitly set
@@ -626,7 +626,7 @@ func extractBasicInfo(player *Player, data []byte) {
 
 	// Play time
 	if offset+0x24 <= len(data) {
-		player.PlayTime = int(binary.LittleEndian.Uint32(data[offset+0x20:]))
+		player.PlayTime = binary.LittleEndian.Uint32(data[offset+0x20:])
 	}
 
 	// Funds
@@ -854,9 +854,9 @@ func customizePlayer(player *Player, custom Customization) ([]byte, error) {
 		}
 	}
 
-	if custom.PlayTime != -1 {
+	if custom.PlayTime != uint32(0) {
 		if offset+0x24 <= len(modifiedData) {
-			modifiedData[offset+0x20] = byte(custom.PlayTime)
+			binary.LittleEndian.PutUint32(modifiedData[offset+0x20:], uint32(custom.PlayTime))
 			player.PlayTime = custom.PlayTime
 		}
 	}
@@ -1181,7 +1181,7 @@ func extractNullTerminatedString(data []byte, offset, maxLen int) string {
 	return string(data[offset:end])
 }
 
-func formatPlayTime(seconds int) string {
+func formatPlayTime(seconds uint32) string {
 	hours := seconds / 3600
 	minutes := (seconds % 3600) / 60
 	secs := seconds % 60
@@ -1214,20 +1214,60 @@ func searchInMemory(data []byte, search []byte) []int {
 	return results
 }
 
+// // Replace occurrences at specific offsets
+// func replaceInMemory(data []byte, search []byte, replace []byte, offsets []int) []byte {
+// 	// Create a copy of the data
+// 	result := make([]byte, len(data))
+// 	copy(result, data)
+
+// 	replaced := 0
+// 	for _, offset := range offsets {
+// 		// Check bounds
+// 		if offset < 0 || offset+len(replace) > len(result) {
+// 			continue
+// 		}
+
+// 		// Verify the search string still exists at this offset
+// 		matches := true
+// 		for j := 0; j < len(search); j++ {
+// 			if result[offset+j] != search[j] {
+// 				matches = false
+// 				break
+// 			}
+// 		}
+
+// 		if matches {
+// 			// Perform replacement
+// 			for j := 0; j < len(replace); j++ {
+// 				result[offset+j] = replace[j]
+// 			}
+// 			replaced++
+// 		}
+// 	}
+
+// 	return result
+// }
+
 // Replace occurrences at specific offsets
 func replaceInMemory(data []byte, search []byte, replace []byte, offsets []int) []byte {
 	// Create a copy of the data
 	result := make([]byte, len(data))
 	copy(result, data)
 
+	// Determine effective replacement length (truncate if needed)
+	repLen := len(replace)
+	if repLen > len(search) {
+		repLen = len(search)
+	}
+
 	replaced := 0
 	for _, offset := range offsets {
-		// Check bounds
-		if offset < 0 || offset+len(replace) > len(result) {
+		// Check bounds based on search length
+		if offset < 0 || offset+len(search) > len(result) {
 			continue
 		}
 
-		// Verify the search string still exists at this offset
+		// Verify the search bytes still exist at this offset
 		matches := true
 		for j := 0; j < len(search); j++ {
 			if result[offset+j] != search[j] {
@@ -1237,10 +1277,16 @@ func replaceInMemory(data []byte, search []byte, replace []byte, offsets []int) 
 		}
 
 		if matches {
-			// Perform replacement
-			for j := 0; j < len(replace); j++ {
+			// Clear entire matched region
+			for j := 0; j < len(search); j++ {
+				result[offset+j] = 0x00
+			}
+
+			// Copy replacement bytes (possibly truncated)
+			for j := 0; j < repLen; j++ {
 				result[offset+j] = replace[j]
 			}
+
 			replaced++
 		}
 	}
