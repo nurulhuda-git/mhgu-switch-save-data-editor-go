@@ -1,613 +1,3 @@
-// package main
-
-// import (
-// 	"encoding/binary"
-// 	"flag"
-// 	"fmt"
-// 	"io/ioutil"
-// 	"os"
-// )
-
-// // Player structure based on C# code
-// type Player struct {
-// 	SaveOffset int
-
-// 	// Basic info
-// 	Name          string
-// 	PlayTime      int
-// 	Funds         int
-// 	HunterRank    int
-// 	HRPoints      int
-// 	AcademyPoints int
-
-// 	// Village points
-// 	BhernaPoints int
-// 	KokotoPoints int
-// 	PokkePoints  int
-// 	YukumoPoints int
-
-// 	// Appearance
-// 	Voice     byte
-// 	EyeColor  byte
-// 	Clothing  byte
-// 	Gender    byte
-// 	HairStyle byte
-// 	Face      byte
-// 	Features  byte
-
-// 	// Colors
-// 	SkinColorRGBA     [4]byte
-// 	HairColorRGBA     [4]byte
-// 	FeaturesColorRGBA [4]byte
-// 	ClothingColorRGBA [4]byte
-
-// 	// Item box
-// 	ItemId    []string
-// 	ItemCount []string
-
-// 	// Equipment
-// 	EquipmentInfo   []byte
-// 	EquipmentPalico []byte
-
-// 	// Other data
-// 	PalicoData         []byte
-// 	GuildCardData      []byte
-// 	ArenaData          []byte
-// 	MonsterKills       []byte
-// 	MonsterCaptures    []byte
-// 	MonsterSizes       []byte
-// 	ManualShoutouts    []byte
-// 	AutomaticShoutouts []byte
-// }
-
-// func main() {
-// 	inputFile := flag.String("input", "", "Input save file path")
-// 	// outputFile := flag.String("output", "system_modified.bin", "Output save file path")
-// 	displayAll := flag.Bool("all", false, "Display all information")
-// 	displayItems := flag.Bool("items", false, "Display item box summary")
-// 	displayEquips := flag.Bool("equips", false, "Display equipment box summary")
-// 	displayPalico := flag.Bool("palico", false, "Display palico summary")
-// 	slot := flag.Int("slot", 1, "Character slot (1-3)")
-// 	debug := flag.Bool("debug", false, "Debug mode")
-
-// 	flag.Parse()
-
-// 	if *inputFile == "" {
-// 		fmt.Println("Error: --input flag is required")
-// 		os.Exit(1)
-// 	}
-
-// 	fmt.Printf("=== MHGU SAVE EDITOR (Go) ===\n")
-// 	fmt.Printf("Based on MHXX Save Editor v0.09c by Ukee\n")
-
-// 	// Load save file
-// 	saveData, extractedData, isSwitch, err := loadSaveFile(*inputFile)
-// 	if err != nil {
-// 		fmt.Printf("Error loading save: %v\n", err)
-// 		os.Exit(1)
-// 	}
-
-// 	fmt.Printf("\nFile: %s\n", *inputFile)
-// 	fmt.Printf("Size: %d bytes\n", len(saveData))
-// 	if isSwitch {
-// 		fmt.Printf("Type: MHGU Switch (removed 36-byte header)\n")
-// 	}
-// 	fmt.Printf("Extracted size: %d bytes\n", len(extractedData))
-
-// 	// Extract player data
-// 	player, err := extractPlayerData(extractedData, *slot)
-// 	if err != nil {
-// 		fmt.Printf("Error extracting player data: %v\n", err)
-// 		os.Exit(1)
-// 	}
-
-// 	// Display information based on flags
-// 	if *displayAll || !(*displayItems || *displayEquips || *displayPalico) {
-// 		// Default: show character info
-// 		displayCharacterInfo(player, *slot, *debug)
-// 	}
-
-// 	if *displayAll || *displayItems {
-// 		displayItemBoxInfo(player, *debug)
-// 	}
-
-// 	if *displayAll || *displayEquips {
-// 		displayEquipmentInfo(player, *debug)
-// 	}
-
-// 	if *displayAll || *displayPalico {
-// 		displayPalicoInfo(player, *debug)
-// 	}
-
-// 	// Show data section sizes
-// 	if *displayAll {
-// 		displayDataSections(player)
-// 	}
-// }
-
-// func loadSaveFile(filename string) ([]byte, []byte, bool, error) {
-// 	data, err := ioutil.ReadFile(filename)
-// 	if err != nil {
-// 		return nil, nil, false, err
-// 	}
-
-// 	var extractedData []byte
-// 	isSwitch := false
-
-// 	// Check save type
-// 	switch len(data) {
-// 	case 4726152: // 3DS
-// 		extractedData = data
-// 	case 4726152 + 36: // Switch
-// 		fallthrough
-// 	case 4726152 + 432948: // MHGU
-// 		if len(data) >= 36 {
-// 			extractedData = data[36:]
-// 			isSwitch = true
-// 		} else {
-// 			return nil, nil, false, fmt.Errorf("Switch save too small")
-// 		}
-// 	default:
-// 		return nil, nil, false, fmt.Errorf("unknown save size: %d bytes", len(data))
-// 	}
-
-// 	return data, extractedData, isSwitch, nil
-// }
-
-// func extractPlayerData(data []byte, slot int) (*Player, error) {
-// 	if slot < 1 || slot > 3 {
-// 		return nil, fmt.Errorf("invalid slot: %d", slot)
-// 	}
-
-// 	// Check slot usage
-// 	if len(data) < 0x07 {
-// 		return nil, fmt.Errorf("save data too small")
-// 	}
-
-// 	var slotUsed bool
-// 	var slotOffset int
-
-// 	switch slot {
-// 	case 1:
-// 		slotUsed = data[0x04] == 1
-// 		if len(data) >= 0x14 {
-// 			slotOffset = int(binary.LittleEndian.Uint32(data[0x10:]))
-// 		}
-// 	case 2:
-// 		slotUsed = data[0x05] == 1
-// 		if len(data) >= 0x18 {
-// 			slotOffset = int(binary.LittleEndian.Uint32(data[0x14:]))
-// 		}
-// 	case 3:
-// 		slotUsed = data[0x06] == 1
-// 		if len(data) >= 0x1C {
-// 			slotOffset = int(binary.LittleEndian.Uint32(data[0x18:]))
-// 		}
-// 	}
-
-// 	if !slotUsed {
-// 		return nil, fmt.Errorf("slot %d is not used", slot)
-// 	}
-
-// 	if slotOffset == 0 || slotOffset >= len(data) {
-// 		return nil, fmt.Errorf("invalid character offset: 0x%X", slotOffset)
-// 	}
-
-// 	player := &Player{
-// 		SaveOffset: slotOffset,
-// 	}
-
-// 	// Extract basic info
-// 	extractBasicInfo(player, data)
-
-// 	// Extract item box
-// 	extractItemBox(player, data)
-
-// 	// Extract other data sections
-// 	extractOtherData(player, data)
-
-// 	return player, nil
-// }
-
-// func extractBasicInfo(player *Player, data []byte) {
-// 	offset := player.SaveOffset
-
-// 	// Name
-// 	nameOffset := offset + 0x23B7D
-// 	if nameOffset+32 <= len(data) {
-// 		player.Name = extractNullTerminatedString(data, nameOffset, 32)
-// 	}
-
-// 	// Play time
-// 	if offset+0x24 <= len(data) {
-// 		player.PlayTime = int(binary.LittleEndian.Uint32(data[offset+0x20:]))
-// 	}
-
-// 	// Funds
-// 	if offset+0x28 <= len(data) {
-// 		player.Funds = int(binary.LittleEndian.Uint32(data[offset+0x24:]))
-// 	}
-
-// 	// Hunter rank
-// 	if offset+0x2A <= len(data) {
-// 		player.HunterRank = int(binary.LittleEndian.Uint16(data[offset+0x28:]))
-// 	}
-
-// 	// HR points
-// 	if offset+0x280F <= len(data) {
-// 		player.HRPoints = int(binary.LittleEndian.Uint32(data[offset+0x280B:]))
-// 	}
-
-// 	// Academy points
-// 	if offset+0x281B <= len(data) {
-// 		player.AcademyPoints = int(binary.LittleEndian.Uint32(data[offset+0x2817:]))
-// 	}
-
-// 	// Village points
-// 	if offset+0x282B <= len(data) {
-// 		player.BhernaPoints = int(binary.LittleEndian.Uint32(data[offset+0x281B:]))
-// 		player.KokotoPoints = int(binary.LittleEndian.Uint32(data[offset+0x281F:]))
-// 		player.PokkePoints = int(binary.LittleEndian.Uint32(data[offset+0x2823:]))
-// 		player.YukumoPoints = int(binary.LittleEndian.Uint32(data[offset+0x2827:]))
-// 	}
-
-// 	// Appearance
-// 	if offset+0x23B50 <= len(data) {
-// 		player.Voice = data[offset+0x23B48]
-// 		player.EyeColor = data[offset+0x23B49]
-// 		player.Clothing = data[offset+0x23B4A]
-// 		player.Gender = data[offset+0x23B4B]
-// 		player.HairStyle = data[offset+0x23B4D]
-// 		player.Face = data[offset+0x23B4E]
-// 		player.Features = data[offset+0x23B4F]
-// 	}
-
-// 	// Colors
-// 	if offset+0x23B77 <= len(data) {
-// 		copy(player.SkinColorRGBA[:], data[offset+0x23B67:])
-// 		copy(player.HairColorRGBA[:], data[offset+0x23B6B:])
-// 		copy(player.FeaturesColorRGBA[:], data[offset+0x23B6F:])
-// 		copy(player.ClothingColorRGBA[:], data[offset+0x23B73:])
-// 	}
-// }
-
-// func extractItemBox(player *Player, data []byte) {
-// 	offset := player.SaveOffset
-// 	itemBoxOffset := offset + 0x0278
-
-// 	if itemBoxOffset+5463 > len(data) {
-// 		return
-// 	}
-
-// 	// Extract item box data (simplified - actual extraction needs bit manipulation)
-// 	player.ItemId = make([]string, 2300)
-// 	player.ItemCount = make([]string, 2300)
-
-// 	// For now, just store the raw bytes
-// 	itemBoxData := make([]byte, 5463)
-// 	copy(itemBoxData, data[itemBoxOffset:itemBoxOffset+5463])
-
-// 	// Simplified: mark all as empty
-// 	for i := 0; i < 2300; i++ {
-// 		player.ItemId[i] = "0"
-// 		player.ItemCount[i] = "0"
-// 	}
-// }
-
-// func extractOtherData(player *Player, data []byte) {
-// 	offset := player.SaveOffset
-
-// 	// Equipment box
-// 	equipOffset := offset + 0x62EE
-// 	if equipOffset+72000 <= len(data) {
-// 		player.EquipmentInfo = make([]byte, 72000)
-// 		copy(player.EquipmentInfo, data[equipOffset:equipOffset+72000])
-// 	}
-
-// 	// Palico equipment
-// 	palicoEquipOffset := offset + 0x17C2E
-// 	if palicoEquipOffset+36000 <= len(data) {
-// 		player.EquipmentPalico = make([]byte, 36000)
-// 		copy(player.EquipmentPalico, data[palicoEquipOffset:palicoEquipOffset+36000])
-// 	}
-
-// 	// Palico data
-// 	palicoOffset := offset + 0x23BB6
-// 	if palicoOffset+27216 <= len(data) {
-// 		player.PalicoData = make([]byte, 27216)
-// 		copy(player.PalicoData, data[palicoOffset:palicoOffset+27216])
-// 	}
-
-// 	// Guild card
-// 	guildCardOffset := offset + 0xC71BD
-// 	if guildCardOffset+4986 <= len(data) {
-// 		player.GuildCardData = make([]byte, 4986)
-// 		copy(player.GuildCardData, data[guildCardOffset:guildCardOffset+4986])
-// 	}
-
-// 	// Arena data
-// 	arenaOffset := offset + 0xC83E1
-// 	if arenaOffset+342 <= len(data) {
-// 		player.ArenaData = make([]byte, 342)
-// 		copy(player.ArenaData, data[arenaOffset:arenaOffset+342])
-// 	}
-
-// 	// Monster data
-// 	monsterKillsOffset := offset + 0x5EA6
-// 	if monsterKillsOffset+274 <= len(data) {
-// 		player.MonsterKills = make([]byte, 274)
-// 		copy(player.MonsterKills, data[monsterKillsOffset:monsterKillsOffset+274])
-// 	}
-
-// 	monsterCaptureOffset := offset + 0x5FB8
-// 	if monsterCaptureOffset+274 <= len(data) {
-// 		player.MonsterCaptures = make([]byte, 274)
-// 		copy(player.MonsterCaptures, data[monsterCaptureOffset:monsterCaptureOffset+274])
-// 	}
-
-// 	monsterSizeOffset := offset + 0x60CA
-// 	if monsterSizeOffset+548 <= len(data) {
-// 		player.MonsterSizes = make([]byte, 548)
-// 		copy(player.MonsterSizes, data[monsterSizeOffset:monsterSizeOffset+548])
-// 	}
-
-// 	// Shoutouts
-// 	manualShoutOffset := offset + 0x11D629
-// 	if manualShoutOffset+2880 <= len(data) {
-// 		player.ManualShoutouts = make([]byte, 2880)
-// 		copy(player.ManualShoutouts, data[manualShoutOffset:manualShoutOffset+2880])
-// 	}
-
-// 	autoShoutOffset := offset + 0x11E169
-// 	if autoShoutOffset+1620 <= len(data) {
-// 		player.AutomaticShoutouts = make([]byte, 1620)
-// 		copy(player.AutomaticShoutouts, data[autoShoutOffset:autoShoutOffset+1620])
-// 	}
-// }
-
-// func displayCharacterInfo(player *Player, slot int, debug bool) {
-// 	fmt.Printf("\n=== CHARACTER SLOT %d ===\n", slot)
-// 	fmt.Printf("Save Offset: 0x%08X\n", player.SaveOffset)
-
-// 	// Basic Info
-// 	fmt.Printf("\n--- BASIC INFORMATION ---\n")
-// 	fmt.Printf("Name:          %s\n", player.Name)
-// 	fmt.Printf("Play Time:     %s\n", formatPlayTime(player.PlayTime))
-// 	fmt.Printf("Funds:         %dz\n", player.Funds)
-// 	fmt.Printf("Hunter Rank:   %d\n", player.HunterRank)
-// 	fmt.Printf("HR Points:     %d\n", player.HRPoints)
-// 	fmt.Printf("Academy Points:%d\n", player.AcademyPoints)
-
-// 	// Village Points
-// 	fmt.Printf("\n--- VILLAGE POINTS ---\n")
-// 	fmt.Printf("Bherna:   %d\n", player.BhernaPoints)
-// 	fmt.Printf("Kokoto:   %d\n", player.KokotoPoints)
-// 	fmt.Printf("Pokke:    %d\n", player.PokkePoints)
-// 	fmt.Printf("Yukumo:   %d\n", player.YukumoPoints)
-
-// 	// Appearance
-// 	fmt.Printf("\n--- APPEARANCE ---\n")
-// 	fmt.Printf("Gender:        %d\n", player.Gender)
-// 	fmt.Printf("Voice:         %d\n", player.Voice)
-// 	fmt.Printf("Eye Color:     %d\n", player.EyeColor)
-// 	fmt.Printf("Clothing:      %d\n", player.Clothing)
-// 	fmt.Printf("Hair Style:    %d\n", player.HairStyle)
-// 	fmt.Printf("Face:          %d\n", player.Face)
-// 	fmt.Printf("Features:      %d\n", player.Features)
-
-// 	// Colors
-// 	fmt.Printf("\n--- COLORS (RGBA) ---\n")
-// 	fmt.Printf("Skin:      R:%3d G:%3d B:%3d A:%3d\n",
-// 		player.SkinColorRGBA[0], player.SkinColorRGBA[1],
-// 		player.SkinColorRGBA[2], player.SkinColorRGBA[3])
-// 	fmt.Printf("Hair:      R:%3d G:%3d B:%3d A:%3d\n",
-// 		player.HairColorRGBA[0], player.HairColorRGBA[1],
-// 		player.HairColorRGBA[2], player.HairColorRGBA[3])
-// 	fmt.Printf("Features:  R:%3d G:%3d B:%3d A:%3d\n",
-// 		player.FeaturesColorRGBA[0], player.FeaturesColorRGBA[1],
-// 		player.FeaturesColorRGBA[2], player.FeaturesColorRGBA[3])
-// 	fmt.Printf("Clothing:  R:%3d G:%3d B:%3d A:%3d\n",
-// 		player.ClothingColorRGBA[0], player.ClothingColorRGBA[1],
-// 		player.ClothingColorRGBA[2], player.ClothingColorRGBA[3])
-
-// 	if debug {
-// 		fmt.Printf("\n--- DEBUG INFO ---\n")
-// 		fmt.Printf("Name offset: 0x%08X + 0x23B7D = 0x%08X\n",
-// 			player.SaveOffset, player.SaveOffset+0x23B7D)
-// 	}
-// }
-
-// func displayItemBoxInfo(player *Player, debug bool) {
-// 	fmt.Printf("\n=== ITEM BOX ===\n")
-// 	fmt.Printf("Total slots: 2300\n")
-// 	fmt.Printf("Data size: %d bytes\n", len(player.ItemId)*19) // 19 bits per item
-
-// 	// Count non-empty items
-// 	nonEmpty := 0
-// 	for i := 0; i < 2300; i++ {
-// 		if player.ItemId[i] != "0" && player.ItemCount[i] != "0" {
-// 			nonEmpty++
-// 		}
-// 	}
-
-// 	fmt.Printf("Non-empty items: %d\n", nonEmpty)
-// 	fmt.Printf("Empty slots: %d\n", 2300-nonEmpty)
-
-// 	if debug && nonEmpty > 0 {
-// 		fmt.Printf("\nFirst 10 non-empty items:\n")
-// 		count := 0
-// 		for i := 0; i < 2300 && count < 10; i++ {
-// 			if player.ItemId[i] != "0" && player.ItemCount[i] != "0" {
-// 				fmt.Printf("  Slot %4d: ID=%s, Count=%s\n",
-// 					i+1, player.ItemId[i], player.ItemCount[i])
-// 				count++
-// 			}
-// 		}
-// 	}
-// }
-
-// func displayEquipmentInfo(player *Player, debug bool) {
-// 	fmt.Printf("\n=== EQUIPMENT BOX ===\n")
-// 	fmt.Printf("Total slots: 2000\n")
-// 	fmt.Printf("Data size: %d bytes (36 bytes per equipment)\n", len(player.EquipmentInfo))
-
-// 	// Count non-empty equipment
-// 	nonEmpty := 0
-// 	for i := 0; i < 2000; i++ {
-// 		// Check if equipment type is not 0 (empty)
-// 		if len(player.EquipmentInfo) > i*36 && player.EquipmentInfo[i*36] != 0 {
-// 			nonEmpty++
-// 		}
-// 	}
-
-// 	fmt.Printf("Non-empty equipment: %d\n", nonEmpty)
-// 	fmt.Printf("Empty slots: %d\n", 2000-nonEmpty)
-
-// 	if debug && nonEmpty > 0 {
-// 		fmt.Printf("\nFirst 5 equipment items:\n")
-// 		count := 0
-// 		for i := 0; i < 2000 && count < 5; i++ {
-// 			if len(player.EquipmentInfo) > i*36+36 {
-// 				eqType := player.EquipmentInfo[i*36]
-// 				eqID := binary.LittleEndian.Uint16(player.EquipmentInfo[i*36+2:])
-// 				if eqType != 0 {
-// 					fmt.Printf("  Slot %4d: Type=%d, ID=%d\n", i+1, eqType, eqID)
-// 					count++
-// 				}
-// 			}
-// 		}
-// 	}
-
-// 	// Palico equipment
-// 	fmt.Printf("\n=== PALICO EQUIPMENT ===\n")
-// 	fmt.Printf("Total slots: 1000\n")
-// 	fmt.Printf("Data size: %d bytes\n", len(player.EquipmentPalico))
-
-// 	palicoNonEmpty := 0
-// 	for i := 0; i < 1000; i++ {
-// 		if len(player.EquipmentPalico) > i*36 && player.EquipmentPalico[i*36] != 0 {
-// 			palicoNonEmpty++
-// 		}
-// 	}
-
-// 	fmt.Printf("Non-empty palico equipment: %d\n", palicoNonEmpty)
-// 	fmt.Printf("Empty slots: %d\n", 1000-palicoNonEmpty)
-// }
-
-// func displayPalicoInfo(player *Player, debug bool) {
-// 	fmt.Printf("\n=== PALICO DATA ===\n")
-// 	fmt.Printf("Total slots: 84\n")
-// 	fmt.Printf("Data size: %d bytes (324 bytes per palico)\n", len(player.PalicoData))
-
-// 	// Count palicos with names
-// 	palicoCount := 0
-// 	for i := 0; i < 84; i++ {
-// 		if len(player.PalicoData) > i*324 {
-// 			// Check if name is not empty (first byte not 0)
-// 			if player.PalicoData[i*324] != 0 {
-// 				palicoCount++
-// 			}
-// 		}
-// 	}
-
-// 	fmt.Printf("Palicos with names: %d\n", palicoCount)
-
-// 	if debug && palicoCount > 0 {
-// 		fmt.Printf("\nFirst 3 palicos:\n")
-// 		count := 0
-// 		for i := 0; i < 84 && count < 3; i++ {
-// 			if len(player.PalicoData) > i*324+32 && player.PalicoData[i*324] != 0 {
-// 				name := extractNullTerminatedString(player.PalicoData, i*324, 32)
-// 				if name != "" {
-// 					// Get palico type (offset 37)
-// 					palicoType := "Unknown"
-// 					if len(player.PalicoData) > i*324+37 {
-// 						pt := player.PalicoData[i*324+37]
-// 						palicoType = fmt.Sprintf("Type %d", pt)
-// 					}
-// 					fmt.Printf("  Slot %2d: %s (%s)\n", i+1, name, palicoType)
-// 					count++
-// 				}
-// 			}
-// 		}
-// 	}
-// }
-
-// func displayDataSections(player *Player) {
-// 	fmt.Printf("\n=== DATA SECTIONS ===\n")
-// 	fmt.Printf("Item Box:          %7d bytes\n", 5463)
-// 	fmt.Printf("Equipment Box:     %7d bytes\n", 72000)
-// 	fmt.Printf("Palico Equipment:  %7d bytes\n", 36000)
-// 	fmt.Printf("Palico Data:       %7d bytes\n", 27216)
-// 	fmt.Printf("Monster Kills:     %7d bytes\n", 274)
-// 	fmt.Printf("Monster Captures:  %7d bytes\n", 274)
-// 	fmt.Printf("Monster Sizes:     %7d bytes\n", 548)
-// 	fmt.Printf("Guild Card:        %7d bytes\n", 4986)
-// 	fmt.Printf("Arena Data:        %7d bytes\n", 342)
-// 	fmt.Printf("Manual Shoutouts:  %7d bytes\n", 2880)
-// 	fmt.Printf("Auto Shoutouts:    %7d bytes\n", 1620)
-
-// 	// Show actual loaded sizes
-// 	fmt.Printf("\n--- ACTUALLY LOADED ---\n")
-// 	fmt.Printf("Equipment Info:    %7d bytes\n", len(player.EquipmentInfo))
-// 	fmt.Printf("Equipment Palico:  %7d bytes\n", len(player.EquipmentPalico))
-// 	fmt.Printf("Palico Data:       %7d bytes\n", len(player.PalicoData))
-// 	fmt.Printf("Guild Card:        %7d bytes\n", len(player.GuildCardData))
-// 	fmt.Printf("Arena Data:        %7d bytes\n", len(player.ArenaData))
-// 	fmt.Printf("Monster Data:      %7d bytes (kills: %d, captures: %d, sizes: %d)\n",
-// 		len(player.MonsterKills)+len(player.MonsterCaptures)+len(player.MonsterSizes),
-// 		len(player.MonsterKills), len(player.MonsterCaptures), len(player.MonsterSizes))
-// 	fmt.Printf("Shoutouts:         %7d bytes (manual: %d, auto: %d)\n",
-// 		len(player.ManualShoutouts)+len(player.AutomaticShoutouts),
-// 		len(player.ManualShoutouts), len(player.AutomaticShoutouts))
-// }
-
-// // Helper functions
-// func extractNullTerminatedString(data []byte, offset, maxLen int) string {
-// 	if offset < 0 || offset >= len(data) {
-// 		return ""
-// 	}
-
-// 	end := offset
-// 	for end < len(data) && end-offset < maxLen && data[end] != 0 {
-// 		end++
-// 	}
-
-// 	if end == offset {
-// 		return ""
-// 	}
-
-// 	return string(data[offset:end])
-// }
-
-// func formatPlayTime(seconds int) string {
-// 	hours := seconds / 3600
-// 	minutes := (seconds % 3600) / 60
-// 	secs := seconds % 60
-// 	return fmt.Sprintf("%d:%02d:%02d", hours, minutes, secs)
-// }
-
-// // Search function (from previous code)
-// func searchInSave(data []byte, searchStr string) []int {
-// 	searchBytes := []byte(searchStr)
-// 	var results []int
-
-// 	for i := 0; i <= len(data)-len(searchBytes); i++ {
-// 		found := true
-// 		for j := 0; j < len(searchBytes); j++ {
-// 			if data[i+j] != searchBytes[j] {
-// 				found = false
-// 				break
-// 			}
-// 		}
-// 		if found {
-// 			results = append(results, i)
-// 		}
-// 	}
-
-// 	return results
-// }
-
 package main
 
 import (
@@ -685,6 +75,7 @@ type Customization struct {
 	HairStyle int
 	Face      int
 	Features  int
+	PlayTime  int
 
 	// Colors
 	SkinColor     [4]int
@@ -722,7 +113,7 @@ func main() {
 	debug := flag.Bool("debug", false, "Debug mode")
 
 	// Customization flags
-	// setName := flag.String("name", "", "Set character name")
+	setName := flag.String("name", "", "Set character name")
 	setGender := flag.Int("gender", -1, "Set gender (0=male, 1=female)")
 	setVoice := flag.Int("voice", -1, "Set voice (0-?)")
 	setEyeColor := flag.Int("eyecolor", -1, "Set eye color (0-?)")
@@ -730,6 +121,7 @@ func main() {
 	setHairStyle := flag.Int("hairstyle", -1, "Set hair style (0-?)")
 	setFace := flag.Int("face", -1, "Set face (0-?)")
 	setFeatures := flag.Int("features", -1, "Set features (0-?)")
+	setPlayTime := flag.Int("playtime", -1, "Set play time (seconds)")
 
 	// Color flags
 	setSkinR := flag.Int("skinr", -1, "Set skin color red (0-255)")
@@ -762,7 +154,7 @@ func main() {
 		fmt.Println("  # Display character info:")
 		fmt.Println("  ./mhgu-editor --input system.bin --slot 1")
 		fmt.Println("\n  # Change to female character:")
-		fmt.Println("  ./mhgu-editor --input system.bin --slot 1 --gender 1")
+		fmt.Println("  ./mhgu-editor --input system.bin --slot 1 --gender 1 --name \"Velvet\"")
 		fmt.Println("\n  # Customize appearance:")
 		fmt.Println("  ./mhgu-editor --input system.bin --slot 1 --gender 1 --voice 15 --hairstyle 20")
 		os.Exit(1)
@@ -857,14 +249,14 @@ func main() {
 	copy(player.SaveData, extractedData)
 
 	// Check if we need to customize
-	needCustomize := *setGender != -1 || *setVoice != -1 ||
+	needCustomize := *setName != "" || *setGender != -1 || *setVoice != -1 ||
 		*setEyeColor != -1 || *setClothing != -1 || *setHairStyle != -1 ||
 		*setFace != -1 || *setFeatures != -1 ||
 		*setSkinR != -1 || *setSkinG != -1 || *setSkinB != -1 || *setSkinA != -1 ||
 		*setHairR != -1 || *setHairG != -1 || *setHairB != -1 || *setHairA != -1 ||
 		*setFunds != -1 || *setHRPoints != -1 || *setHunterRank != -1 ||
 		*setAcademyPoints != -1 || *setBherna != -1 || *setKokoto != -1 ||
-		*setPokke != -1 || *setYukumo != -1
+		*setPokke != -1 || *setYukumo != -1 || *setPlayTime != -1
 
 	// Add this after checking for customization but before displaying info
 	if *searchStr != "" && *replaceStr != "" {
@@ -975,6 +367,7 @@ func main() {
 			HairStyle: int(player.HairStyle),
 			Face:      int(player.Face),
 			Features:  int(player.Features),
+			PlayTime:  player.PlayTime,
 			// Convert [4]byte to [4]int
 			SkinColor:     byteArrayToIntArray(player.SkinColorRGBA),
 			HairColor:     byteArrayToIntArray(player.HairColorRGBA),
@@ -991,7 +384,9 @@ func main() {
 		}
 
 		// Override only if flags are explicitly set (not -1)
-		fmt.Println("AAAA", *setGender)
+		if *setName != "" {
+			custom.Name = *setName
+		}
 		if *setGender != -1 {
 			custom.Gender = *setGender
 		}
@@ -1012,6 +407,9 @@ func main() {
 		}
 		if *setFeatures != -1 {
 			custom.Features = *setFeatures
+		}
+		if *setPlayTime != -1 {
+			custom.PlayTime = *setPlayTime
 		}
 
 		// Only override color components that are explicitly set
@@ -1213,10 +611,16 @@ func extractPlayerData(data []byte, slot int) (*Player, error) {
 func extractBasicInfo(player *Player, data []byte) {
 	offset := player.SaveOffset
 
-	// Name - using the offset we found earlier (0x18CC78 from character base)
-	// First try to find name by searching
-	nameOffset := findNameOffset(data, offset)
-	if nameOffset > 0 {
+	// // Name - using the offset we found earlier (0x18CC78 from character base)
+	// // First try to find name by searching
+	// nameOffset := findNameOffset(data, offset)
+	// if nameOffset > 0 {
+	// 	player.Name = extractNullTerminatedString(data, nameOffset, 32)
+	// }
+
+	// Name
+	nameOffset := offset + 0x23B7D
+	if nameOffset+32 <= len(data) {
 		player.Name = extractNullTerminatedString(data, nameOffset, 32)
 	}
 
@@ -1370,10 +774,25 @@ func customizePlayer(player *Player, custom Customization) ([]byte, error) {
 	offset := player.SaveOffset
 
 	// Apply name change
+	// if custom.Name != "" && len(custom.Name) <= 32 {
+	// 	// First find where the name is actually stored
+	// 	nameOffset := findNameOffset(modifiedData, offset)
+	// 	if nameOffset > 0 && nameOffset+32 <= len(modifiedData) {
+	// 		// Clear existing name
+	// 		for i := 0; i < 32; i++ {
+	// 			modifiedData[nameOffset+i] = 0
+	// 		}
+	// 		// Write new name
+	// 		nameBytes := []byte(custom.Name)
+	// 		copy(modifiedData[nameOffset:], nameBytes)
+	// 		player.Name = custom.Name
+	// 	}
+	// }
+
+	// Apply name change
 	if custom.Name != "" && len(custom.Name) <= 32 {
-		// First find where the name is actually stored
-		nameOffset := findNameOffset(modifiedData, offset)
-		if nameOffset > 0 && nameOffset+32 <= len(modifiedData) {
+		nameOffset := offset + 0x23B7D
+		if nameOffset+32 <= len(modifiedData) {
 			// Clear existing name
 			for i := 0; i < 32; i++ {
 				modifiedData[nameOffset+i] = 0
@@ -1432,6 +851,13 @@ func customizePlayer(player *Player, custom Customization) ([]byte, error) {
 		if offset+0x23B50 <= len(modifiedData) {
 			modifiedData[offset+0x23B4F] = byte(custom.Features)
 			player.Features = byte(custom.Features)
+		}
+	}
+
+	if custom.PlayTime != -1 {
+		if offset+0x24 <= len(modifiedData) {
+			modifiedData[offset+0x20] = byte(custom.PlayTime)
+			player.PlayTime = custom.PlayTime
 		}
 	}
 
