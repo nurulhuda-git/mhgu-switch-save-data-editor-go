@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -111,6 +112,8 @@ func main() {
 	displayPalico := flag.Bool("palico", false, "Display palico summary")
 	slot := flag.Int("slot", 1, "Character slot (1-3)")
 	debug := flag.Bool("debug", false, "Debug mode")
+	searchHexStr := flag.String("searchhex", "", "Search hex pattern (e.g. \"56 00 65 00 6C 00 76 00 65 00 74\")")
+	replaceHexStr := flag.String("replacehex", "", "Replace with hex pattern (e.g. \"41 00 42 00 43\")")
 
 	// Customization flags
 	setName := flag.String("name", "", "Set character name")
@@ -161,7 +164,7 @@ func main() {
 	}
 
 	fmt.Printf("=== MHGU SAVE EDITOR ===\n")
-	fmt.Printf("Based on MHXX Save Editor v0.09c by Ukee\n")
+	fmt.Printf("Based on MHXX Save Editor v0.09c by Ukee (Thanks Ukee ./\\.)\n")
 
 	if *searchStr != "" && *replaceStr == "" {
 		// Search mode only
@@ -202,6 +205,43 @@ func main() {
 			fmt.Printf("[%d] File offset: 0x%08X\n", i+1, absoluteOffset)
 		}
 
+		return
+	}
+
+	// HEX search mode
+	if *searchHexStr != "" && *replaceHexStr == "" {
+		pattern, err := parseHexPattern(*searchHexStr)
+		if err != nil {
+			fmt.Printf("Error parsing hex pattern: %v\n", err)
+			os.Exit(1)
+		}
+
+		_, extractedData, isSwitch, err := loadSaveFile(*inputFile)
+		if err != nil {
+			fmt.Printf("Error loading save: %v\n", err)
+			os.Exit(1)
+		}
+
+		results := searchInMemory(extractedData, pattern)
+		fmt.Printf("\n=== HEX SEARCH RESULTS ===\n")
+		fmt.Printf("Searching for hex: \"%s\"\n", *searchHexStr)
+		fmt.Printf("Found %d occurrence(s)\n", len(results))
+
+		for i, offset := range results {
+			fmt.Printf("\n[%d] Offset: 0x%08X (in extracted data)\n", i+1, offset)
+			// optional: show bytes around match
+			hexDump(extractedData, offset-16, len(pattern)+32, true)
+		}
+
+		// show absolute offsets
+		fmt.Printf("\n=== ABSOLUTE FILE OFFSETS ===\n")
+		for i, offset := range results {
+			absoluteOffset := offset
+			if isSwitch {
+				absoluteOffset += 36
+			}
+			fmt.Printf("[%d] File offset: 0x%08X\n", i+1, absoluteOffset)
+		}
 		return
 	}
 
@@ -355,6 +395,59 @@ func main() {
 		return
 	}
 	// End of Add this after checking for customization but before displaying info
+
+	// HEX search + HEX replace
+	if *searchHexStr != "" && *replaceHexStr != "" {
+		searchBytes, err := parseHexPattern(*searchHexStr)
+		if err != nil {
+			fmt.Printf("Error parsing search hex: %v\n", err)
+			os.Exit(1)
+		}
+
+		replaceBytes, err := parseHexPattern(*replaceHexStr)
+		if err != nil {
+			fmt.Printf("Error parsing replace hex: %v\n", err)
+			os.Exit(1)
+		}
+
+		offsets := searchInMemory(extractedData, searchBytes)
+		if len(offsets) == 0 {
+			fmt.Println("No hex pattern found")
+			return
+		}
+
+		modifiedData := replaceInMemory(
+			extractedData,
+			searchBytes,
+			replaceBytes,
+			offsets,
+		)
+
+		// Save modified file
+		finalData := make([]byte, len(saveData))
+		if isSwitch {
+			copy(finalData, saveData[:36]) // Keep original header
+			copy(finalData[36:], modifiedData)
+		} else {
+			copy(finalData, modifiedData)
+		}
+
+		err = ioutil.WriteFile(*outputFile, finalData, 0644)
+		if err != nil {
+			fmt.Printf("Error saving file: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("\nSuccessfully replaced %d occurrence(s)\n", len(offsets))
+		fmt.Printf("Saved to: %s\n", *outputFile)
+
+		// Verify
+		verifyResults := searchInMemory(modifiedData, searchBytes)
+		verifyReplace := searchInMemory(modifiedData, replaceBytes)
+		fmt.Printf("Verification: Original found %d times, Replacement found %d times\n",
+			len(verifyResults), len(verifyReplace))
+		return
+	}
 
 	if needCustomize {
 		// Create customization struct with player's current values
@@ -1409,4 +1502,19 @@ func hexDump(data []byte, start, length int, ascii bool) {
 // Helper function to convert [4]byte to [4]int
 func byteArrayToIntArray(b [4]byte) [4]int {
 	return [4]int{int(b[0]), int(b[1]), int(b[2]), int(b[3])}
+}
+
+// parseHexPattern converts a space-separated hex string into a byte slice.
+// e.g. "56 65 6C 76 65 74" → []byte{0x56, 0x65, 0x6C, 0x76, 0x65, 0x74}
+func parseHexPattern(s string) ([]byte, error) {
+	parts := strings.Fields(s)
+	out := make([]byte, 0, len(parts))
+	for _, p := range parts {
+		b, err := strconv.ParseUint(p, 16, 8)
+		if err != nil {
+			return nil, fmt.Errorf("invalid hex token %q: %v", p, err)
+		}
+		out = append(out, byte(b))
+	}
+	return out, nil
 }
